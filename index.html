@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANTI_STREAK_SERVER_V5.0</title>
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-red: #ff0055;
+            --bg-dark: #020202;
+            --panel-bg: rgba(10, 20, 30, 0.9);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--neon-blue);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Grid Background */
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(rgba(0, 243, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        .main-frame {
+            width: 100%;
+            max-width: 400px;
+            border: 1px solid var(--neon-blue);
+            min-height: 100vh;
+            padding: 15px;
+            box-sizing: border-box;
+            background: var(--panel-bg);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 2px solid var(--neon-blue);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-badge {
+            background: var(--neon-blue);
+            color: #000;
+            padding: 2px 5px;
+            font-weight: bold;
+            font-size: 10px;
+        }
+
+        /* Hacker Prediction Panel */
+        .hack-box {
+            border: 1px solid var(--neon-red);
+            padding: 15px;
+            background: rgba(50, 0, 0, 0.3);
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hack-box::before {
+            content: "ANTI-STREAK ACTIVE";
+            position: absolute;
+            top: 0; right: 0;
+            background: var(--neon-red);
+            color: white;
+            font-size: 8px;
+            padding: 2px 4px;
+        }
+
+        .pred-title {
+            color: var(--neon-red);
+            font-size: 11px;
+            letter-spacing: 1px;
+        }
+
+        .pred-result {
+            font-size: 28px;
+            font-weight: bold;
+            color: #fff;
+            margin-top: 5px;
+            text-shadow: 0 0 10px var(--neon-red);
+        }
+
+        /* Timer & Info */
+        .timer-big {
+            font-size: 50px;
+            text-align: center;
+            color: #fff;
+            font-weight: bold;
+            text-shadow: 0 0 10px white;
+            margin: 10px 0;
+        }
+
+        .period-info {
+            text-align: center;
+            color: #888;
+            font-size: 13px;
+        }
+
+        /* Result Display */
+        .result-panel {
+            background: #111;
+            border: 1px solid #333;
+            padding: 15px;
+            text-align: center;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .res-number { font-size: 40px; font-weight: bold; }
+        .res-size { font-size: 20px; text-transform: uppercase; }
+
+        /* History */
+        .history-box {
+            height: 180px;
+            overflow-y: auto;
+            border-top: 1px solid #333;
+            padding-top: 10px;
+        }
+        
+        .log-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid #222;
+            font-size: 12px;
+        }
+
+        /* Color Utility */
+        .c-green { color: #00e676; text-shadow: 0 0 5px #00e676; }
+        .c-red { color: #ff1744; text-shadow: 0 0 5px #ff1744; }
+        .c-violet { color: #d500f9; text-shadow: 0 0 5px #d500f9; }
+
+        /* Animation */
+        @keyframes scan {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 0% 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="bg-grid"></div>
+
+    <div class="main-frame">
+        <div class="header">
+            SYSTEM V5.0 <span class="status-badge">ONLINE</span><br>
+            <span style="font-size:9px; color:#aaa;">MODE: NO_DUPLICATE_STREAK</span>
+        </div>
+
+        <div class="hack-box">
+            <div class="pred-title">>> NEXT OUTCOME (PRE-CALCULATED)</div>
+            <div class="pred-result" id="predictionText">CALCULATING...</div>
+            <div style="font-size:9px; color:#777; margin-top:5px;">
+                LOGIC: If last 2 results were same, force flip.
+            </div>
+        </div>
+
+        <div class="period-info">PERIOD: <span id="periodId" style="color:white">...</span></div>
+        <div class="timer-big" id="timer">00:00</div>
+
+        <div class="result-panel">
+            <div style="font-size:10px; color:#555; margin-bottom:5px;">OFFICIAL SERVER RESULT</div>
+            <div id="finalResult">WAITING...</div>
+        </div>
+
+        <div class="history-box">
+            <div style="font-size:11px; color:#666; margin-bottom:5px;">LOCAL DATABASE (HISTORY)</div>
+            <div id="historyList"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        
+        // 1. Deterministic Random (Based on Period ID)
+        // This ensures the raw number is always the same for a specific period ID
+        function getRawHash(seed) {
+            let x = Math.sin(seed) * 9999;
+            return Math.floor((x - Math.floor(x)) * 10);
+        }
+
+        // 2. INTELLIGENT LOGIC (The Streak Breaker)
+        function getSmartResult(periodIdStr) {
+            const currentId = parseInt(periodIdStr);
+
+            // Calculate Raw Numbers for Past 2 Periods
+            const prev1_Raw = getRawHash(currentId - 1);
+            const prev2_Raw = getRawHash(currentId - 2);
+
+            // Determine Sizes of Past 2
+            const size1 = prev1_Raw >= 5 ? 'BIG' : 'SMALL';
+            const size2 = prev2_Raw >= 5 ? 'BIG' : 'SMALL';
+
+            // Get Current Raw Number
+            let currentNum = getRawHash(currentId);
+            let finalSize = currentNum >= 5 ? 'BIG' : 'SMALL';
+
+            // --- ANTI-STREAK CORE LOGIC ---
+            // If the last 2 periods were the SAME, force the current one to be OPPOSITE.
+            if (size1 === size2) {
+                if (size1 === 'SMALL') {
+                    // Previous were Small, Small -> Force BIG
+                    // Map current number to 5-9 range
+                    currentNum = 5 + (currentNum % 5); 
+                } else {
+                    // Previous were Big, Big -> Force SMALL
+                    // Map current number to 0-4 range
+                    currentNum = (currentNum % 5);
+                }
+            }
+            
+            // Re-calculate size based on the potentially forced number
+            finalSize = currentNum >= 5 ? 'BIG' : 'SMALL';
+
+            // Color Logic (Strict Pattern)
+            let color = '';
+            let css = '';
+            
+            if (currentNum === 0) { color = 'Violet/Red'; css = 'c-violet'; }
+            else if (currentNum === 5) { color = 'Violet/Green'; css = 'c-violet'; }
+            else if (currentNum % 2 === 0) { color = 'Red'; css = 'c-red'; }
+            else { color = 'Green'; css = 'c-green'; }
+
+            return { num: currentNum, size: finalSize, color: color, css: css };
+        }
+
+        // --- DOM ELEMENTS ---
+        const elTimer = document.getElementById('timer');
+        const elPeriod = document.getElementById('periodId');
+        const elPredict = document.getElementById('predictionText');
+        const elFinal = document.getElementById('finalResult');
+        const elHistory = document.getElementById('historyList');
+
+        let currentPeriodString = "";
+
+        // --- GAME LOOP (Runs every second) ---
+        function updateSystem() {
+            const now = new Date();
+            const totalMinutes = now.getHours() * 60 + now.getMinutes();
+            const dateStr = now.toISOString().slice(0,10).replace(/-/g, '');
+            
+            // Generate Period ID (YYYYMMDD + 1 + Minute)
+            const activePeriodId = dateStr + "1" + String(totalMinutes).padStart(4, '0');
+            const seconds = 60 - now.getSeconds();
+
+            // Display Info
+            elTimer.innerText = `00:${seconds < 10 ? '0'+seconds : seconds}`;
+            elPeriod.innerText = activePeriodId;
+
+            // 1. SHOW PREDICTION (Future/Current)
+            const prediction = getSmartResult(activePeriodId);
+            elPredict.innerHTML = `
+                ${prediction.size} <span style="font-size:16px" class="${prediction.css}">(${prediction.color})</span>
+            `;
+
+            // 2. SHOW RESULT (Only after period changes)
+            if (currentPeriodString !== activePeriodId) {
+                // If we moved to a new period, it means the previous one ended.
+                // Display the PREVIOUS period's result officially.
+                if (currentPeriodString !== "") {
+                    const prevRes = getSmartResult(currentPeriodString);
+                    displayResult(prevRes);
+                    addToHistory(currentPeriodString, prevRes);
+                }
+                currentPeriodString = activePeriodId;
+                
+                // Clear main board for suspense (optional)
+                elFinal.innerHTML = "<span class='blink'>SYNCING...</span>";
+            }
+        }
+
+        function displayResult(res) {
+            elFinal.innerHTML = `
+                <div class="res-number ${res.css}">${res.num}</div>
+                <div class="res-size">${res.size}</div>
+            `;
+        }
+
+        // --- HISTORY MANAGEMENT ---
+        function addToHistory(id, res) {
+            const row = document.createElement('div');
+            row.className = 'log-item';
+            row.innerHTML = `
+                <span>${id}</span>
+                <span class="${res.css}" style="font-weight:bold">${res.num} ${res.size}</span>
+            `;
+            elHistory.prepend(row);
+            
+            // Limit history to 15 items
+            if(elHistory.children.length > 15) elHistory.lastChild.remove();
+
+            // Save to browser memory
+            localStorage.setItem('anti_streak_history', elHistory.innerHTML);
+        }
+
+        // Load History on Page Load
+        if(localStorage.getItem('anti_streak_history')) {
+            elHistory.innerHTML = localStorage.getItem('anti_streak_history');
+        }
+
+        // Start Timer
+        setInterval(updateSystem, 1000);
+        updateSystem();
+
+        // Blink Animation helper
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = `
+            .blink { animation: blinker 1s linear infinite; }
+            @keyframes blinker { 50% { opacity: 0; } }
+        `;
+        document.head.appendChild(styleSheet);
+
+    </script>
+</body>
+</html>
